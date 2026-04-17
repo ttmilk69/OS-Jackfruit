@@ -1,111 +1,113 @@
-# Multi-Container Runtime
+# OS Jackfruit – Mini Container Runtime
 
-A lightweight Linux container runtime in C with a long-running supervisor and a kernel-space memory monitor.
+## Overview
 
-Read [`project-guide.md`](project-guide.md) for the full project specification.
+This project implements a lightweight container runtime in C along with a custom Linux kernel module for monitoring and enforcing memory limits. It demonstrates key operating system concepts such as process isolation, kernel-user communication, memory management, and CPU scheduling.
+
+The runtime creates containers using Linux namespaces, while the kernel module tracks memory usage and enforces soft and hard limits. The system also includes experiments to study CPU scheduling using different nice values.
 
 ---
 
-## Getting Started
+## Features
 
-### 1. Fork the Repository
+- Process isolation using Linux namespaces:
+  - PID namespace  
+  - UTS namespace  
+  - Mount namespace  
 
-1. Go to [github.com/shivangjhalani/OS-Jackfruit](https://github.com/shivangjhalani/OS-Jackfruit)
-2. Click **Fork** (top-right)
-3. Clone your fork:
+- User-space and kernel-space communication using ioctl  
+- Memory monitoring using Resident Set Size (RSS)  
+- Soft limit enforcement with warning messages  
+- Hard limit enforcement with process termination  
+- CPU scheduling experiment using nice values  
+- Proper cleanup with no zombie processes  
 
-```bash
-git clone https://github.com/<your-username>/OS-Jackfruit.git
-cd OS-Jackfruit
-```
+---
 
-### 2. Set Up Your VM
+## Project Structure
+OS--Jackfruit/
 
-You need an **Ubuntu 22.04 or 24.04** VM with **Secure Boot OFF**. WSL will not work.
+├── boilerplate/
 
-Install dependencies:
+│ ├── engine.c
 
-```bash
-sudo apt update
-sudo apt install -y build-essential linux-headers-$(uname -r)
-```
+│ ├── monitor.c
 
-### 3. Run the Environment Check
+│ ├── monitor_ioctl.h
 
-```bash
-cd boilerplate
-chmod +x environment-check.sh
-sudo ./environment-check.sh
-```
+│ ├── memory_hog.c
 
-Fix any issues reported before moving on.
+│ ├── cpu_hog.c
 
-### 4. Prepare the Root Filesystem
+│ ├── io_pulse.c
 
-```bash
-mkdir rootfs-base
-wget https://dl-cdn.alpinelinux.org/alpine/v3.20/releases/x86_64/alpine-minirootfs-3.20.3-x86_64.tar.gz
-tar -xzf alpine-minirootfs-3.20.3-x86_64.tar.gz -C rootfs-base
+│ ├── rootfs-alpha/
 
-# Make one writable copy per container you plan to run
-cp -a ./rootfs-base ./rootfs-alpha
-cp -a ./rootfs-base ./rootfs-beta
-```
+│ ├── rootfs-beta/
 
-Do not commit `rootfs-base/` or `rootfs-*` directories to your repository.
+│ └── rootfs-base/
 
-### 5. Understand the Boilerplate
+└── README.md
 
-The `boilerplate/` folder contains starter files:
 
-| File                   | Purpose                                             |
-| ---------------------- | --------------------------------------------------- |
-| `engine.c`             | User-space runtime and supervisor skeleton          |
-| `monitor.c`            | Kernel module skeleton                              |
-| `monitor_ioctl.h`      | Shared ioctl command definitions                    |
-| `Makefile`             | Build targets for both user-space and kernel module |
-| `cpu_hog.c`            | CPU-bound test workload                             |
-| `io_pulse.c`           | I/O-bound test workload                             |
-| `memory_hog.c`         | Memory-consuming test workload                      |
-| `environment-check.sh` | VM environment preflight check                      |
+---
 
-Use these as your starting point. You are free to restructure the repository however you want — the submission requirements are listed in the project guide.
+## Build Instructions
 
-### 6. Build and Verify
+Run the following commands inside the `boilerplate` directory:
 
 ```bash
-cd boilerplate
+make clean
 make
 ```
 
-If this compiles without errors, your environment is ready.
+## Running the System (Demonstration)
 
-### 7. GitHub Actions Smoke Check
-
-Your fork will inherit a minimal GitHub Actions workflow from this repository.
-
-That workflow only performs CI-safe checks:
-
-- `make -C boilerplate ci`
-- user-space binary compilation (`engine`, `memory_hog`, `cpu_hog`, `io_pulse`)
-- `./boilerplate/engine` with no arguments must print usage and exit with a non-zero status
-
-The CI-safe build command is:
-
-```bash
-make -C boilerplate ci
-```
-
-This smoke check does not test kernel-module loading, supervisor runtime behavior, or container execution.
+This section shows how the container runtime and kernel module are executed along with expected outputs.
 
 ---
 
-## What to Do Next
+### 1. Load Kernel Module
 
-Read [`project-guide.md`](project-guide.md) end to end. It contains:
+```bash
+sudo insmod monitor.ko
+```
+This loads the kernel module and creates the device:
+/dev/container_monitor
 
-- The six implementation tasks (multi-container runtime, CLI, logging, kernel monitor, scheduling experiments, cleanup)
-- The engineering analysis you must write
-- The exact submission requirements, including what your `README.md` must contain (screenshots, analysis, design decisions)
+### 2. Start Supervisor
+```bash
+sudo ./engine supervisor ./rootfs-base
+```
+### 3. Start a Container
+```bash
+sudo ./engine start alpha ./rootfs-alpha /memory_hog
+```
+### 4. List Running Containers
+``` bash
+sudo ./engine ps
+```
+### 5. View Logs
+``` bash
+dmesg -w
+```
+### 6. Stop a Container
+``` bash
+sudo ./engine stop alpha
+```
+### 7. Scheduling Experiment
+``` bash
+sudo ./engine start c1 ./rootfs-alpha /cpu_hog --nice 10
+sudo ./engine start c2 ./rootfs-beta /cpu_hog --nice -5
+ps -eo pid,ni,%cpu,comm | grep cpu_hog
+```
+### 8. Cleanup and Verification
+``` bash
+ps aux | grep defunct
 
-Your fork's `README.md` should be replaced with your own project documentation as described in the submission package section of the project guide. (As in get rid of all the above content and replace with your README.md)
+ps aux | grep defunct
+```
+## Contributors
+Jyeshta J
+
+Manapriya K
